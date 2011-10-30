@@ -15,7 +15,7 @@
       (= input pattern) bindings
       (segment-pattern? pattern) (segment-matcher pattern input bindings)
       (single-pattern? pattern) (single-matcher pattern input bindings)
-      (and (list? pattern) (list? input)) (recur (rest pattern)
+      (and (seq? pattern) (seq? input)) (recur (rest pattern)
                                                  (rest input)
                                                  (pat-match (first pattern)
                                                             (first input)
@@ -41,25 +41,29 @@
 (declare match-is match-or match-and match-not)
 
 (def single-match-table
-  {'?is match-is
-   '?or match-or
-   '?and match-and
-   '?not match-not})
+  {
+   ;; '?is match-is
+   ;; '?or match-or
+   ;; '?and match-and
+   ;; '?not match-not
+   })
 
 (declare segment-match segment-match+ segment-match? match-if)
 
 (def segment-match-table
-  {'?* segment-match
-   '?+ segment-match+
-   '?? segment-match?
-   '?if match-if})
+  {
+   '?* segment-match
+   ;; '?+ segment-match+
+   ;; '?? segment-match?
+   ;; '?if match-if
+   })
 
 (declare segment-match-fn single-match-fn)
 
 (defn segment-pattern?
   "Is this a segment-matching pattern like ((?* var) . pat)"
   [pattern]
-  (and (list? pattern) (list? (first pattern))
+  (and (seq? pattern) (seq? (first pattern))
        (symbol? (ffirst pattern))
        (segment-match-fn (ffirst pattern))))
 
@@ -67,13 +71,12 @@
   "Is this a single-matching pattern?
 Eg. (?is x predicate) (?and predicate) (?or predicate)."
   [pattern]
-  (and (list? pattern)
+  (and (seq? pattern)
        (single-match-fn (first pattern))))
 
 (defn segment-matcher
   "Call the right function for this kind of segment matcher"
   [pattern input bindings]
-  ;; (println "smf input:" (rest pattern) input bindings)
   ((segment-match-fn (ffirst pattern)) pattern input bindings))
 
 (defn single-matcher
@@ -134,9 +137,6 @@ where var-and-pred is the list (var pred)"
   (let [all-lists (list* l more-lsts)
         seqs (map seq all-lists)
         rests (map rest all-lists)]
-    ;; (println "all-lists:" all-lists)
-    ;; (println "seqs:" seqs)
-    ;; (println "rests:" rests)
     (lazy-seq
      (when-not (some nil? seqs)
        (cons (apply f all-lists)
@@ -144,8 +144,14 @@ where var-and-pred is the list (var pred)"
 
 (defn starts-with? [lst x]
   "List starts with the given value"
-  (and (list? lst)
+  (and (seq? lst)
        (= (first lst) x)))
+
+(defn sublist
+  ([lst start]
+     (drop start lst))
+  ([lst start end]
+     (drop start (take end lst))))
 
 (defn find-position-and-sublist
   "Given a list and a element to look for it returns a vector [idx lst]
@@ -156,28 +162,39 @@ where idx is the index of the element in the list and lst is the sublist"
         sublist-starts-with (filter #(starts-with? (second %) x) idx-sublists)]
     sublist-starts-with))
 
-(defn find-match-pos
+(def atom? (complement coll?))
+
+(defn get-index
+  "Find the index of the key starting from start"
+  [lst key & {:keys [start] :or {start 0}}]
+  (first (filter (complement nil?) (map (fn [elt idx]
+                                          (when (= elt key)
+                                            idx))
+                                        (nthnext lst start)
+                                        (range)))))
+
+(defn first-match-pos
   "Find the matching position of pat1 in the input. Pat1 should be a constant."
-  [pat1 input]
-  (when-not (or (coll? pat1) (variable? pat1))
-    (find-position-and-sublist input pat1)))
+  [pat1 input start]
+  (cond (and (atom? pat1) (not (variable? pat1))) (get-index input pat1 :start start)
+        (< start (count input)) start
+        :else nil))
 
 (defn segment-match
   "Match the segment pattern ((?* var) . pat) against the input"
-  [pattern input bindings]
-  (let [var (second (first pattern))
-        pat (next pattern)]
-    (println "var:" var)
-    (println "pat:" pat)
-    (if (nil? pat)
-      (match-variable var input bindings)
-      (do
-        (println "find-match-pos:"(find-match-pos (first pat) input))
-        (some (fn [[idx lst]]
-                (let [res (pat-match pat
-                                     (drop idx input)
-                                     (match-variable var (take idx input) bindings))]
-                  (when-not (= res fail)
-                    res)))
-              (find-match-pos (first pat) input))))))
-
+  ([pattern input bindings]
+     (segment-match pattern input bindings 0))
+  
+  ([pattern input bindings start]
+     (let [var (second (first pattern))
+           pat (next pattern)]
+       (if (nil? pat)
+         (match-variable var input bindings)
+         (let [pos (first-match-pos (first pat) input start)]
+           (if (nil? pos)
+             fail
+             (let [mv (match-variable var (sublist input 0 pos) bindings)
+                   b2 (pat-match pat (sublist input pos) mv)]
+               (if (= b2 fail)
+                 (segment-match pattern input bindings (inc pos))
+                 b2))))))))
