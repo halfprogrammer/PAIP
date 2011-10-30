@@ -44,10 +44,10 @@
 
 (def single-match-table
   {
-   ;; '?is match-is
-   ;; '?or match-or
-   ;; '?and match-and
-   ;; '?not match-not
+   '?is match-is
+   '?or match-or
+   '?and match-and
+   '?not match-not
    })
 
 (declare segment-match segment-match+ segment-match? match-if)
