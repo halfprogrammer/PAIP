@@ -1,5 +1,7 @@
 (ns cloj.patmatch)
 
+(use '[evalive.core :only (evil destro)])
+
 (def fail 'nil)
 
 (declare variable? match-variable
@@ -53,9 +55,9 @@
 (def segment-match-table
   {
    '?* segment-match
-   ;; '?+ segment-match+
-   ;; '?? segment-match?
-   ;; '?if match-if
+   '?+ segment-match+
+   '?? segment-match?
+   '?if match-if
    })
 
 (declare segment-match-fn single-match-fn)
@@ -198,3 +200,33 @@ where idx is the index of the element in the list and lst is the sublist"
                (if (= b2 fail)
                  (segment-match pattern input bindings (inc pos))
                  b2))))))))
+
+(defn segment-match+
+  "Match one or more elements"
+  [pattern input bindings]
+  (segment-match pattern input bindings 1))
+
+(defn segment-match?
+  "Match zero or one element"
+  [pattern input bindings]
+  (let [var (second (first pattern))
+        pat (next pattern)]
+    (or (pat-match (list* var pat) input bindings)
+        (pat-match pat input bindings))))
+
+(defn match-if
+  "Test an arbitrary expression involving variables"
+  [pattern input bindings]
+  (let [con (evalive.core/lexical-context)]
+    (create-ns 'abcd)
+    (doseq [kv (con 'bindings)]
+      (intern 'abcd (key kv) (val kv)))
+    (ns abcd)
+    (intern 'abcd 'res (eval (second (first pattern)))))
+  (ns cloj.patmatch)
+  (and (deref (ns-resolve 'abcd 'res))
+       (pat-match (rest pattern) input bindings)))
+
+;;; This works!
+;; (pat-match '(?x ?op ?y is ?z (?if (= ((resolve ?op) ?x ?y) ?z)))
+;; 			  '(3 + 4 is 7))
