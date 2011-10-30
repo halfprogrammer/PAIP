@@ -22,10 +22,10 @@
   "The mapping operation involves applying function to successive sets of arguments in which one argument is obtained from each collection."
   [f l & more-lsts]
   (let [all-lists (list* l more-lsts)
-        firsts (map first all-lists)
+        seqs (map seq all-lists)
         rests (map rest all-lists)]
     (lazy-seq
-     (when-not (some nil? firsts)
+     (when-not (some nil? seqs)
        (cons (apply f all-lists)
               (apply maplist f rests))))))
 
